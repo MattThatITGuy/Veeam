@@ -695,6 +695,57 @@ header {
 
 /* ── NO HV MSG ── */
 .no-hv-msg { grid-column: 1/-1; text-align: center; padding: 60px; color: var(--ink3); font-size: 14px; }
+
+.tooltip-wrap { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.tooltip-wrap .sup-partial { cursor: help; }
+
+#tooltip-global {
+  display: none;
+  position: fixed;
+  z-index: 500;
+  background: #1a1f2e;
+  color: #e2e8f4;
+  font-size: 11.5px;
+  font-family: 'Inter', sans-serif;
+  line-height: 1.55;
+  padding: 10px 13px;
+  border-radius: 9px;
+  max-width: 240px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.2);
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+[data-theme="dark"] #tooltip-global {
+  background: #252a3d;
+  border-color: rgba(255,255,255,0.1);
+}
+.tooltip-arrow {
+  position: absolute;
+  width: 0; height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+}
+.tooltip-arrow.down {
+  top: -6px; left: 50%;
+  transform: translateX(-50%);
+  border-bottom: 6px solid #1a1f2e;
+}
+.tooltip-arrow.up {
+  bottom: -6px; left: 50%;
+  transform: translateX(-50%);
+  border-top: 6px solid #1a1f2e;
+}
+[data-theme="dark"] .tooltip-arrow.down { border-bottom-color: #252a3d; }
+[data-theme="dark"] .tooltip-arrow.up { border-top-color: #252a3d; }
+.tooltip-label {
+  font-size: 9.5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #fbbf24;
+  margin-bottom: 5px;
+}
 </style>
 </head>
 <body>
@@ -769,6 +820,12 @@ header {
   </div>
 </div>
 
+<div id="tooltip-global">
+  <div class="tooltip-arrow down" id="tooltip-arrow"></div>
+  <div class="tooltip-label">Partial support</div>
+  <div id="tooltip-text"></div>
+</div>
+
 <script>
 // ── DATA ────────────────────────────────────────────────────────────────────
 
@@ -799,7 +856,12 @@ const CATEGORIES = [
         name: 'Application-aware Backups',
         isNew: false, edition: null,
         desc: 'App-consistent backups with transaction log support',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'App-consistent backup is supported via VSS/scripts, but transaction log backup for Oracle, PostgreSQL, and SQL Server is not available.',
+          scalecomp: 'App-consistent backup via guest interaction is supported, but transaction log backup for databases is not available on HyperCore.',
+          rhv: 'App-consistent backup is supported via guest interaction, but transaction log backup for Oracle, PostgreSQL, and SQL Server requires additional configuration and may be limited.'
+        }
       },
       {
         name: 'Backup from Storage Snapshots',
@@ -853,7 +915,10 @@ const CATEGORIES = [
         name: 'Universal CDP',
         isNew: true, edition: 'advanced',
         desc: 'CDP for any Windows machine replicating to VMware vSphere',
-        support: { vsphere: 'full', hyperv: 'partial', nutanix: 'none', proxmox: 'none', scalecomp: 'none', rhv: 'none' }
+        support: { vsphere: 'full', hyperv: 'partial', nutanix: 'none', proxmox: 'none', scalecomp: 'none', rhv: 'none' },
+        partialNotes: {
+          hyperv: 'Hyper-V VMs can act as a CDP replication source targeting VMware vSphere via Cloud Connect, but Hyper-V is not a supported CDP target platform.'
+        }
       },
       {
         name: 'Replication from Backup',
@@ -907,7 +972,12 @@ const CATEGORIES = [
         name: 'Instant Database Recovery',
         isNew: false, edition: null,
         desc: 'Instantly recover SQL Server or Oracle DBs to any server',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Instant recovery is available for SQL Server and Oracle databases hosted on VMs, but requires the database to be accessible via a Veeam Agent or image-level backup with app-aware processing enabled.',
+          scalecomp: 'Database instant recovery is supported via image-level backups with guest interaction, but native HyperCore integration is limited — agent-based backup is recommended for reliable database recovery.',
+          rhv: 'Instant database recovery works via image-level backups with app-aware processing. Native OLVM/RHV integration is limited; Veeam Agent deployment inside VMs is recommended for optimal results.'
+        }
       },
       {
         name: 'Entire VM Restore',
@@ -919,7 +989,10 @@ const CATEGORIES = [
         name: 'Direct Restore to AWS / Azure / GCP',
         isNew: false, edition: null,
         desc: 'Migrate or restore on-prem VMs directly to cloud',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'partial', proxmox: 'none', scalecomp: 'none', rhv: 'none' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'partial', proxmox: 'none', scalecomp: 'none', rhv: 'none' },
+        partialNotes: {
+          nutanix: 'Direct restore to AWS, Azure, and GCP is supported from Nutanix AHV image-level backups, but cross-platform restore (AHV → cloud) may require additional disk format conversion steps compared to vSphere/Hyper-V workflows.'
+        }
       },
     ]
   },
@@ -937,37 +1010,65 @@ const CATEGORIES = [
         name: 'Guest File System Indexing',
         isNew: false, edition: null,
         desc: 'File catalog enabling search-and-restore without knowing location',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'partial', proxmox: 'none', scalecomp: 'none', rhv: 'none' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'partial', proxmox: 'none', scalecomp: 'none', rhv: 'none' },
+        partialNotes: {
+          nutanix: 'File system indexing is supported for Nutanix AHV VMs, but archival catalog integration (for searching across aged-out backups) and one-click restore directly from search results may require additional configuration.'
+        }
       },
       {
         name: 'Veeam Explorer for Microsoft AD',
         isNew: false, edition: null,
         desc: 'Granular AD object restore including users, groups, passwords',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Single user and computer account restore (including passwords) and LDIFDE export are supported. Multi-select restore, container restore, GPO restore, AD-integrated DNS records, and Configuration Partition objects are not available.',
+          scalecomp: 'Single user and computer account restore (including passwords) and LDIFDE export are supported. Multi-select restore, container restore, GPO restore, AD-integrated DNS records, and Configuration Partition objects are not available.',
+          rhv: 'Single user and computer account restore (including passwords) and LDIFDE export are supported. Multi-select restore, container restore, GPO restore, AD-integrated DNS records, and Configuration Partition objects are not available.'
+        }
       },
       {
         name: 'Veeam Explorer for Microsoft Exchange',
         isNew: false, edition: null,
         desc: 'Item-level recovery for emails, calendar, contacts, and more',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Item-level recovery of emails, appointments, contacts, and notes is supported. Restore back to the original mailbox is not supported — export to PST or alternate mailbox only.',
+          scalecomp: 'Item-level recovery of Exchange items is supported via image-level backups. Restore back to the original mailbox is not supported — export to PST or alternate mailbox only.',
+          rhv: 'Item-level recovery of Exchange items is supported via image-level backups. Restore back to the original mailbox is not supported — export to PST or alternate mailbox only.'
+        }
       },
       {
         name: 'Veeam Explorer for SQL Server',
         isNew: false, edition: null,
         desc: 'Point-in-time database and object recovery',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Local, point-in-time SQL database file restores are supported. Agentless transaction log backup and replay, and transaction-level recovery of SQL objects (tables, stored procedures, views) back to the original or new SQL Server are not available.',
+          scalecomp: 'Local, point-in-time SQL database file restores are supported. Agentless transaction log backup and replay, and transaction-level recovery of SQL objects back to the original or new SQL Server are not available.',
+          rhv: 'Local, point-in-time SQL database file restores are supported. Agentless transaction log backup and replay, and transaction-level recovery of SQL objects back to the original or new SQL Server are not available.'
+        }
       },
       {
         name: 'Veeam Explorer for SharePoint',
         isNew: false, edition: null,
         desc: 'Granular recovery of SharePoint items and entire sites',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'SharePoint item restore via save, send, and export is supported. Full site restore and restore to the original location are not supported.',
+          scalecomp: 'SharePoint item restore via save, send, and export is supported. Full site restore and restore to the original location are not supported.',
+          rhv: 'SharePoint item restore via save, send, and export is supported. Full site restore and restore to the original location are not supported.'
+        }
       },
       {
         name: 'Veeam Explorer for Oracle',
         isNew: false, edition: null,
         desc: 'Transaction-log backup, archived log management, point-in-time',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Oracle database restore to original or new server is supported via image-level backups. Full transaction log backup, archived log management, and transaction-level recovery are best achieved by pairing with the Veeam Plug-in for Oracle RMAN.',
+          scalecomp: 'Oracle restore is supported via image-level backups with guest interaction. Transaction log backup and archived log management are not natively available — the Veeam Plug-in for Oracle RMAN is recommended for full coverage.',
+          rhv: 'Oracle restore is supported via image-level backups with guest interaction. Transaction log backup and archived log management are not natively available — the Veeam Plug-in for Oracle RMAN is recommended for full coverage.'
+        }
       },
       {
         name: 'Veeam Explorer for Storage Snapshots',
@@ -991,13 +1092,23 @@ const CATEGORIES = [
         name: 'YARA Scan',
         isNew: false, edition: 'advanced',
         desc: 'Content scan in SureBackup, Secure Restore, and on-demand (Advanced+)',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'YARA scanning is available on-demand via Scan Backup functionality for image-level backups. Integration within SureBackup automated verification is not available for Proxmox VE.',
+          scalecomp: 'YARA scanning can be performed on backup content via Scan Backup, but SureBackup-integrated automated YARA scanning is not supported for HyperCore environments.',
+          rhv: 'YARA scanning is available via Scan Backup for image-level backups. Automated YARA scanning within SureBackup workflows is not supported for OLVM/RHV.'
+        }
       },
       {
         name: 'Secure Restore',
         isNew: false, edition: null,
         desc: 'Optional AV / YARA scan before recovery to uncompromised state',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Antivirus scan before restore is supported. YARA scan as part of Secure Restore requires Advanced or Premium edition and may have limited automation compared to vSphere/Hyper-V workflows.',
+          scalecomp: 'Antivirus scan before restore is supported for image-level backups. YARA-based Secure Restore requires Advanced/Premium edition; full workflow automation is more limited than on vSphere.',
+          rhv: 'Antivirus scan before restore is supported. YARA scan integration within Secure Restore requires Advanced/Premium edition and has reduced automation capabilities compared to vSphere/Hyper-V.'
+        }
       },
       {
         name: 'SureBackup (Automated Verification)',
@@ -1057,7 +1168,10 @@ const CATEGORIES = [
         name: 'Data Integration API',
         isNew: false, edition: null,
         desc: 'Mount backups for third-party use: data mining, compliance, etc.',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'partial', proxmox: 'none', scalecomp: 'none', rhv: 'none' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'partial', proxmox: 'none', scalecomp: 'none', rhv: 'none' },
+        partialNotes: {
+          nutanix: 'The Data Integration API can mount Nutanix AHV image-level backups for third-party access, but some advanced mount options and disk-level publishing features available on vSphere/Hyper-V may not be fully supported.'
+        }
       },
     ]
   },
@@ -1111,7 +1225,11 @@ const CATEGORIES = [
         name: 'Performance Monitoring & Alerting',
         isNew: false, edition: null,
         desc: 'Backup job stats, latest state, unlimited VBR servers (Veeam ONE)',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'full', scalecomp: 'partial', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'full', scalecomp: 'partial', rhv: 'partial' },
+        partialNotes: {
+          scalecomp: 'Backup job monitoring and alerting is available via Veeam ONE, but infrastructure-level performance metrics and host/datastore visibility specific to HyperCore are limited compared to vSphere and Hyper-V.',
+          rhv: 'Backup job monitoring and alerting is available via Veeam ONE. Infrastructure-level performance graphs and host/VM-level metrics for OLVM/RHV are more limited than the dedicated vSphere and Hyper-V reporting packs.'
+        }
       },
       {
         name: 'Virtual Infrastructure Assessment',
@@ -1129,7 +1247,11 @@ const CATEGORIES = [
         name: 'Veeam ONE Heatmaps',
         isNew: false, edition: null,
         desc: 'Real-time visibility into backup proxies and repositories',
-        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'none', rhv: 'partial' }
+        support: { vsphere: 'full', hyperv: 'full', nutanix: 'full', proxmox: 'partial', scalecomp: 'none', rhv: 'partial' },
+        partialNotes: {
+          proxmox: 'Heatmaps for backup proxies and repositories are available, but VM-level and host-level resource utilization heatmaps specific to Proxmox VE infrastructure are not supported.',
+          rhv: 'Proxy and repository heatmaps are available. Heatmap views for OLVM/RHV host and VM resource utilization are limited compared to the dedicated vSphere and Hyper-V infrastructure views.'
+        }
       },
       {
         name: 'VMware Cloud Director Monitoring',
@@ -1258,9 +1380,18 @@ function buildCategoryTable(cat, hvArr) {
     hvArr.forEach(hv => {
       const sup = feat.support[hv.id] || 'none';
       let indicator = '';
-      if (sup === 'full')    indicator = `<div class="sup-full">✓</div>`;
-      if (sup === 'partial') indicator = `<div class="sup-partial">◐</div>`;
-      if (sup === 'none')    indicator = `<div class="sup-none">—</div>`;
+      if (sup === 'full') {
+        indicator = `<div class="sup-full">✓</div>`;
+      } else if (sup === 'partial') {
+        const note = feat.partialNotes && feat.partialNotes[hv.id];
+        if (note) {
+          indicator = `<div class="tooltip-wrap"><div class="sup-partial" data-note="${note.replace(/"/g, '&quot;').replace(/\n/g, ' ')}" style="cursor:help">◐</div></div>`;
+        } else {
+          indicator = `<div class="sup-partial">◐</div>`;
+        }
+      } else {
+        indicator = `<div class="sup-none">—</div>`;
+      }
       html += `<div class="cell cell-hv">${indicator}</div>`;
     });
     html += `</div>`;
@@ -1420,6 +1551,55 @@ document.getElementById('exportConfirm').addEventListener('click', async () => {
     prog.textContent = 'Export failed: ' + err.message;
   }
 });
+
+// ── TOOLTIP ENGINE ────────────────────────────────────────────────────────────
+const ttGlobal = document.getElementById('tooltip-global');
+const ttText   = document.getElementById('tooltip-text');
+const ttArrow  = document.getElementById('tooltip-arrow');
+
+document.addEventListener('mouseover', e => {
+  const wrap = e.target.closest('.tooltip-wrap');
+  if (!wrap) return;
+  const note = wrap.querySelector('.sup-partial')?.dataset.note;
+  if (!note) return;
+
+  ttText.textContent = note;
+  ttGlobal.style.display = 'block';
+
+  const rect = wrap.getBoundingClientRect();
+  const tw = ttGlobal.offsetWidth;
+  const th = ttGlobal.offsetHeight;
+  const margin = 10;
+
+  let left = rect.left + rect.width / 2 - tw / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tw - margin));
+
+  // Position above or below depending on space
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const showAbove = spaceBelow < th + 16 && rect.top > th + 16;
+
+  ttArrow.className = 'tooltip-arrow ' + (showAbove ? 'up' : 'down');
+
+  const top = showAbove
+    ? rect.top - th - 10
+    : rect.bottom + 10;
+
+  ttGlobal.style.left = left + 'px';
+  ttGlobal.style.top  = top  + 'px';
+
+  // Reposition arrow horizontally to point at the badge
+  const badgeCx = rect.left + rect.width / 2;
+  const arrowLeft = badgeCx - left;
+  ttArrow.style.left = Math.max(12, Math.min(arrowLeft, tw - 12)) + 'px';
+  ttArrow.style.transform = 'translateX(-50%)';
+});
+
+document.addEventListener('mouseout', e => {
+  if (!e.target.closest('.tooltip-wrap')) return;
+  ttGlobal.style.display = 'none';
+});
+
+document.addEventListener('scroll', () => { ttGlobal.style.display = 'none'; }, true);
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
 renderHVCards();
